@@ -15,8 +15,15 @@ tested-with:            GHC == 7.8
 
 library
     build-depends:      base <5
+                      , pure-fft
+                      , ad
+                      , GLUT
+                      , sbv
+                      , JuicyPixels
+                      , linear
     default-language:   Haskell2010
     exposed-modules:    SatOpt
+                        SatOpt.Render
                         -- GENERATE: New.Module
     ghc-options:        -Wall
     ghc-prof-options:   -auto-all -prof
@@ -45,8 +52,10 @@ test-suite tests
                         test-suite
     main-is:            Spec.hs
     other-modules:      SatOpt
+                        SatOpt.Render
                         -- GENERATE: New.Module
                         SatOptSpec
+                        SatOpt.RenderSpec
                         -- GENERATE: New.ModuleSpec
     type:               exitcode-stdio-1.0
     default-extensions: OverloadedStrings
