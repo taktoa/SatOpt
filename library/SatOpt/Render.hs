@@ -10,7 +10,7 @@ import           Foreign          (withArray)
 import           Graphics.UI.GLUT
 import           System.Exit      (exitSuccess)
 
-type ImageFunc = Double -> Double -> Double
+type ImageFunc = Double -> Double -> (Double, Double, Double)
 type Config = (Int, Int, ImageFunc)
 
 imageFunc :: Config -> ImageFunc
@@ -22,13 +22,18 @@ imageSize (x,y,_) = TextureSize2D (fromIntegral x) (fromIntegral y)
 (//) :: (Integral a, Fractional b) => a -> a -> b
 a // b = fromIntegral a / fromIntegral b
 
+toColor :: (Double, Double, Double) -> Color4 GLubyte
+toColor (r, g, b) = Color4 (tc r) (tc g) (tc b) 255
+  where
+    tc x = round $ x * 255
+
 withImage :: ImageFunc -> TextureSize2D -> (GLubyte -> Color4 GLubyte)
                -> (PixelData (Color4 GLubyte) -> IO ()) -> IO ()
 withImage imf (TextureSize2D w h) f act =
-   withArray [ f c |
+   withArray [ toColor c |
                i <- [ 0 .. w - 1 ],
                j <- [ 0 .. h - 1 ],
-               let c = round $ (*255) $ imf (i // w) (j // h) ] $
+               let c = imf (i // w) (j // h) ] $
    act. PixelData RGBA UnsignedByte
 
 myInit :: Config -> IO (Maybe TextureObject)
