@@ -1,5 +1,6 @@
 {-# OPTIONS_GHC -fno-warn-unused-imports #-}
 {-# LANGUAGE BangPatterns #-}
+{-# LANGUAGE ViewPatterns #-}
 
 -- | TODO
 module SatOpt (module SatOpt) where
@@ -16,7 +17,7 @@ import           Debug.Trace                 (trace)
 import           Numeric.FFT                 (fft, ifft)
 
 size :: Num a => a
-size = 512
+size = 256
 
 center :: Floating a => a -> a
 center x = x - (size / 2)
@@ -114,7 +115,7 @@ test1 = matrix
 test2 :: [[Complex Double]]
 test2 = ifft2d $ fft2d matrix
 test3 :: [[Complex Double]]
-test3 = (`mulm` (constm 10000)) $ func1 matrix
+test3 = func1 matrix
 
 unconcat :: Int -> [a] -> [[a]]
 unconcat _ [] = []
@@ -143,13 +144,24 @@ myfun i j = rendCmp $ index (round $ i * (size - 1)) (round $ j * (size - 1)) te
 rotate :: Complex Double -> Complex Double
 rotate = uncurry mkPolar . rot . polar
   where
-    rot (m, p) = (m, p + 0.01)
+    rot (m, p) = (m, p + 0.1)
+
+visual :: (Double, Double, Double, Double) -> Complex Double -> Complex Double
+visual (xa, xb, ya, yb) (polar -> (m, p))
+  = mkPolar (((yb - ya) * (m - xa)/(xb - xa)) + ya) p
+
+visualM :: [[Complex Double]] -> [[Complex Double]]
+visualM cs = map (map (visual (small, big, 0, 1))) cs
+  where
+    mags  = concatMap (map magnitude) cs
+    small = minimum mags
+    big   = maximum mags
 
 config :: Conf [[Complex Double]]
 config = Conf { keyBinds = const id
               , state = test3
               , evolve = map (map rotate)
-              , render = map (map rendCmp)
+              , render = map (map rendCmp) . visualM
               , canvas = (size, size)
               }
 

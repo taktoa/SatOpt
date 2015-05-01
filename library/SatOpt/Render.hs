@@ -9,8 +9,6 @@ module SatOpt.Render ( Conf (..)
 
 import           Control.Concurrent.MVar
 import           Control.Monad           (when)
-import           Data.Colour.RGBSpace    (RGB, uncurryRGB)
-import           Data.List               (transpose)
 import           Data.Maybe              (isJust)
 import           Foreign                 (withArray)
 import           Graphics.UI.GLUT
@@ -63,12 +61,16 @@ myInit c = do
    textureWrapMode Texture2D T $= (Repeated, Repeat)
    textureFilter Texture2D $= ((Nearest, Nothing), Nearest)
    withImage c $ texImage2D Texture2D NoProxy 0 RGBA' (imageSize c) 0
+   texture Texture2D $= Enabled
    return mbTexName
 
-display :: Maybe TextureObject -> DisplayCallback
-display mbTexName = do
+evolveC :: Conf a -> Conf a
+evolveC c = c { state = evolve c $ state c }
+
+display :: MVar (Conf a) -> Maybe TextureObject -> DisplayCallback
+display mv mbTexName = do
+  cstate <- readMVar mv
   clear [ ColorBuffer, DepthBuffer ]
-  texture Texture2D $= Enabled
   textureFunction $= Decal
   when (isJust mbTexName) $ textureBinding Texture2D $= mbTexName
   let texCoord2f = texCoord :: TexCoord2 GLfloat -> IO ()
@@ -78,8 +80,8 @@ display mbTexName = do
     texCoord2f (TexCoord2 0 1); vertex3f (Vertex3 1.0 (-1.0) 0.0 )
     texCoord2f (TexCoord2 1 1); vertex3f (Vertex3 1.0 1.0 0.0 )
     texCoord2f (TexCoord2 1 0); vertex3f (Vertex3 (-1.0) 1.0 0.0 )
-  flush
-  texture Texture2D $= Disabled
+  withImage cstate $ texImage2D Texture2D NoProxy 0 RGBA' (imageSize cstate) 0
+  swapBuffers
 
 reshape :: ReshapeCallback
 reshape size@(Size w h) = do
@@ -94,31 +96,32 @@ reshape size@(Size w h) = do
 kmEncode :: Key -> KeyState -> Modifiers -> Position -> KMState
 kmEncode k ks m p = show (k, ks, m, p)
 
-changeConf :: (Conf a -> Conf a) -> IO ()
-changeConf c = return ()
+changeConf :: MVar (Conf a) -> (Conf a -> Conf a) -> IO ()
+changeConf mv ch = modifyMVar_ mv (return . ch)
 
-keyboard :: Conf a -> KeyboardMouseCallback
+keyboard :: MVar (Conf a) -> KeyboardMouseCallback
 keyboard _ (Char '\27') Down _ _ = exitSuccess
-keyboard c k ks m p = changeConf ((keyBinds c) (kmEncode k ks m p))
---keyboard _            _    _ _ = return ()
+keyboard mv k ks m p = do
+  c <- readMVar mv
+  changeConf mv $ keyBinds c $ kmEncode k ks m p
 
-setClamping :: TextureCoordName -> Clamping -> IO ()
-setClamping coord clamp = do
-  textureWrapMode Texture2D coord $= (Repeated, clamp)
+idle :: MVar (Conf a) -> IdleCallback
+idle mv = do
+  modifyMVar_ mv (return . evolveC)
   postRedisplay Nothing
-
---renderThread :: IO MVar
 
 runDisp :: Conf a -> IO ()
 runDisp c = do
-   (progName, _args) <- getArgsAndInitialize
-   initialDisplayMode    $= [ SingleBuffered, RGBMode, WithDepthBuffer ]
-   initialWindowSize     $= Size 250 250
-   initialWindowPosition $= Position 100 100
-   _ <- createWindow progName
-   mbTexName <- myInit c
-   displayCallback       $= display mbTexName
-   reshapeCallback       $= Just reshape
-   keyboardMouseCallback $= Just (keyboard c)
-   mainLoop
+  cstate <- newMVar c
+  (progName, _args) <- getArgsAndInitialize
+  initialDisplayMode    $= [ DoubleBuffered, RGBMode, WithDepthBuffer ]
+  initialWindowSize     $= Size 250 250
+  initialWindowPosition $= Position 100 100
+  _ <- createWindow progName
+  tex <- myInit c
+  displayCallback       $= display cstate tex
+  reshapeCallback       $= Just reshape
+  keyboardMouseCallback $= Just (keyboard cstate)
+  idleCallback          $= Just (idle cstate)
+  mainLoop
 
