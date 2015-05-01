@@ -1,4 +1,5 @@
 {-# OPTIONS_GHC -fno-warn-unused-imports #-}
+{-# LANGUAGE BangPatterns #-}
 
 -- | TODO
 module SatOpt (module SatOpt) where
@@ -15,15 +16,52 @@ import           Debug.Trace                 (trace)
 import           Numeric.FFT                 (fft, ifft)
 
 size :: Num a => a
-size = 256
+size = 1024
+
+center :: Floating a => a -> a
+center x = x - (size / 2)
+
+norm :: Floating a => a -> a -> a
+norm x y = sqrt $ x^2 + y^2
+
+cnorm :: Floating a => a -> a -> a
+cnorm x y = norm (center x) (center y)
+
+clamp :: Double -> Double
+clamp x
+  | x > 1     = 1
+  | x < 0     = 0
+  | otherwise = x
+
+window :: Double -> Double -> Double
+window x y = (+ 0.5) $ clamp $ subtract 0.5 $ (* (size/8)) $ recip $ cnorm x y
+
+square :: Num a => a -> a
+square x = x * x
+
+--fracComp :: RealFrac a => a -> a
+
+testFunc :: Double -> Double -> Complex Double
+testFunc x y = (f x) * (f y)
+  where
+  f a = if even $ (`div` 13) $ round $ a * 8 * size then 1 else 0
+--testFunc x y = (clamp $ recip $ sqrt $ abs $ (x - y)) :+ 0
+--testFunc x y = window x y * sin ((x + y) * 25 / size) :+ 0
+--testFunc x y = sin ((sqrt ((x - (size / 2))^2 + (y - (size / 2))^2)) * 10 * sqrt 2 / size) :+ 0
 
 matrix :: [[Complex Double]]
-matrix = [[sin (x / 16) * sin (y / 16) :+ 0 | x <- [0, 1 .. size]] | y <- [0, 1 .. size]]
+matrix = [[testFunc x y | y <- [0, 1 .. size]] | x <- [0, 1 .. size]]
 
 fft2d :: [[Complex Double]] -> [[Complex Double]]
-fft2d m = transpose $ mapFFT $ transpose $ mapFFT m
+fft2d m = transpose $ mapFFT $ inter
   where
+    !inter = transpose $ mapFFT m
     mapFFT = parMap rdeepseq fft
+
+ifft2d :: [[Complex Double]] -> [[Complex Double]]
+ifft2d m = transpose $ mapIFFT $ transpose $ mapIFFT m
+  where
+    mapIFFT = parMap rdeepseq ifft
 
 rendCmp :: Complex Double -> (Double, Double, Double)
 rendCmp c = uncurryRGB (\x y z -> (x, y, z)) $ hsl a 1 m
@@ -32,9 +70,11 @@ rendCmp c = uncurryRGB (\x y z -> (x, y, z)) $ hsl a 1 m
     a = (* (180 / pi)) $ (+ pi) $ phase c
 
 test1 :: [[Complex Double]]
-test1 = parMap rdeepseq fft matrix
+test1 = matrix
 test2 :: [[Complex Double]]
-test2 = matrix
+test2 = fft2d matrix
+test3 :: [[Complex Double]]
+test3 = ifft2d matrix
 
 unconcat :: Int -> [a] -> [[a]]
 unconcat _ [] = []
