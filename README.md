@@ -1,5 +1,11 @@
 # SatOpt
 
+This project was made for my UIUC AE 202 spacecraft project. Currently it contains the following programs:
+
+1. A program that solves the Helmholtz equation in two dimensions through the spectral method, and then displays it via OpenGL.
+
+# Installation instructions:
+
 ``` sh
 # Update to latest version of Cabal.
 cabal update
