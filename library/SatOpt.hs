@@ -4,7 +4,7 @@
 -- | TODO
 module SatOpt (module SatOpt) where
 
-import           SatOpt.Render               as SatOpt (runDisp)
+import           SatOpt.Render               as SatOpt
 -- GENERATE: import New.Module as SatOpt
 
 import           Control.Parallel.Strategies (parMap, rdeepseq)
@@ -89,7 +89,7 @@ delta :: Double -> Double -> Double -> Double -> Complex Double
 delta cx cy x y = if norm ((x / size) - cx) ((y / size) - cy) < eps then 1 else 0
 
 matrix :: [[Complex Double]]
-matrix = [[testFunc x y | y <- [0, 1 .. size]] | x <- [0, 1 .. size]]
+matrix = [[testFunc x y | y <- [0, 1 .. size - 1]] | x <- [0, 1 .. size - 1]]
 
 fft2d :: [[Complex Double]] -> [[Complex Double]]
 fft2d m = transpose $ mapFFT $ inter
@@ -104,7 +104,7 @@ ifft2d m = transpose $ mapIFFT $ inter
     mapIFFT = parMap rdeepseq ifft
 
 rendCmp :: Complex Double -> (Double, Double, Double)
-rendCmp c = uncurryRGB (\x y z -> (x, y, z)) $ hsl a 1 m
+rendCmp c = uncurryRGB (\x y z -> (x, y, z)) $ hsl a 0.25 m
   where
     m = magnitude c
     a = (* (180 / pi)) $ (+ pi) $ phase c
@@ -140,8 +140,19 @@ myfun :: Double -> Double -> (Double, Double, Double)
 myfun i j = rendCmp $ index (round $ i * (size - 1)) (round $ j * (size - 1)) test3
   --(test1 !! (round (i * (size - 2)))) !! (round (j * (size - 2)))
 
+rotate :: Complex Double -> Complex Double
+rotate = uncurry mkPolar . rot . polar
+  where
+    rot (m, p) = (m, p + 0.01)
 
+config :: Conf [[Complex Double]]
+config = Conf { keyBinds = const id
+              , state = test3
+              , evolve = map (map rotate)
+              , render = map (map rendCmp)
+              , canvas = (size, size)
+              }
 
 -- | TODO
 main :: IO ()
-main = runDisp (size, size, myfun)
+main = runDisp config
