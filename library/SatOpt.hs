@@ -16,7 +16,7 @@ import           Debug.Trace                 (trace)
 import           Numeric.FFT                 (fft, ifft)
 
 size :: Num a => a
-size = 1024
+size = 512
 
 center :: Floating a => a -> a
 center x = x - (size / 2)
@@ -41,13 +41,52 @@ square x = x * x
 
 --fracComp :: RealFrac a => a -> a
 
+pointSources :: [(Double, Double, Complex Double)] ->
+                Double -> Double -> Complex Double
+pointSources [] _ _ = 0
+pointSources ((cx,cy,s):xs) x y = s * (delta cx cy x y) + pointSources xs x y
+
+
 testFunc :: Double -> Double -> Complex Double
-testFunc x y = (f x) * (f y)
-  where
-  f a = if even $ (`div` 13) $ round $ a * 8 * size then 1 else 0
+testFunc = pointSources [ (0.48, 0.48, 0.5 :+ 0)
+                        , (0.52, 0.52, (-0.5) :+ 0)
+                        ]
+-- testFunc x y = ((1 :+ 0) * delta (size / 4) (size / 4) x y) +
+--                ((1 :+ 0) * delta (3 * size / 4) (3 * size / 4) x y)
+--testFunc x y = (:+ 0) $ clamp $ (*2) $ recip $ cnorm x y
+--testFunc x y = (f x) * (f y)
+--  where
+--  f a = if even $ (`div` 13) $ round $ a * 8 * size then 1 else 0
 --testFunc x y = (clamp $ recip $ sqrt $ abs $ (x - y)) :+ 0
 --testFunc x y = window x y * sin ((x + y) * 25 / size) :+ 0
 --testFunc x y = sin ((sqrt ((x - (size / 2))^2 + (y - (size / 2))^2)) * 10 * sqrt 2 / size) :+ 0
+
+wavenum :: [[Complex Double]]
+wavenum = constm 1
+
+im = [[x :+ 0 | y <- [0, 1 .. size]] | x <- [0, 1 .. size]]
+jm = [[y :+ 0 | y <- [0, 1 .. size]] | x <- [0, 1 .. size]]
+
+constm           :: Num a        =>   a   -> [[a]]
+addm, subm, mulm :: Num a        => [[a]] -> [[a]] -> [[a]]
+divm             :: Fractional a => [[a]] -> [[a]] -> [[a]]
+negm, sqm        :: Num a        => [[a]] -> [[a]]
+
+constm   = replicate size . replicate size
+addm     = zipWith (zipWith (+))
+mulm     = zipWith (zipWith (*))
+divm     = zipWith (zipWith (/))
+subm x y = addm x (negm y)
+negm     = map (map negate)
+sqm      = map (map square)
+
+func1 :: [[Complex Double]] -> [[Complex Double]]
+func1 x = ifft2d $ (fft2d x) `divm` (((sqm wavenum) `addm` (sqm im) `addm` (sqm jm)))
+
+eps = 0.01
+
+delta :: Double -> Double -> Double -> Double -> Complex Double
+delta cx cy x y = if norm ((x / size) - cx) ((y / size) - cy) < eps then 1 else 0
 
 matrix :: [[Complex Double]]
 matrix = [[testFunc x y | y <- [0, 1 .. size]] | x <- [0, 1 .. size]]
@@ -59,8 +98,9 @@ fft2d m = transpose $ mapFFT $ inter
     mapFFT = parMap rdeepseq fft
 
 ifft2d :: [[Complex Double]] -> [[Complex Double]]
-ifft2d m = transpose $ mapIFFT $ transpose $ mapIFFT m
+ifft2d m = transpose $ mapIFFT $ inter
   where
+    !inter = transpose $ mapIFFT m
     mapIFFT = parMap rdeepseq ifft
 
 rendCmp :: Complex Double -> (Double, Double, Double)
@@ -72,9 +112,9 @@ rendCmp c = uncurryRGB (\x y z -> (x, y, z)) $ hsl a 1 m
 test1 :: [[Complex Double]]
 test1 = matrix
 test2 :: [[Complex Double]]
-test2 = fft2d matrix
+test2 = ifft2d $ fft2d matrix
 test3 :: [[Complex Double]]
-test3 = ifft2d matrix
+test3 = (`mulm` (constm 10000)) $ func1 matrix
 
 unconcat :: Int -> [a] -> [[a]]
 unconcat _ [] = []
@@ -97,8 +137,10 @@ index i j l
 
 myfun :: Double -> Double -> (Double, Double, Double)
 --myfun i j = (sin (20 * i)) * (sin (20 * j))
-myfun i j = rendCmp $ index (round $ i * (size - 1)) (round $ j * (size - 1)) test2
+myfun i j = rendCmp $ index (round $ i * (size - 1)) (round $ j * (size - 1)) test3
   --(test1 !! (round (i * (size - 2)))) !! (round (j * (size - 2)))
+
+
 
 -- | TODO
 main :: IO ()

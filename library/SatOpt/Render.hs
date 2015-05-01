@@ -10,6 +10,13 @@ import           Foreign          (withArray)
 import           Graphics.UI.GLUT
 import           System.Exit      (exitSuccess)
 
+-- data Conf a = Conf { keyBinds  :: Map Key (Conf -> Conf)
+--                    , initState :: a
+--                    , evolve    :: a -> a
+--                    , render    :: (Matrix m, Color c) => a -> m c
+--                    }
+
+
 type ImageFunc = Double -> Double -> (Double, Double, Double)
 type Config = (Int, Int, ImageFunc)
 
