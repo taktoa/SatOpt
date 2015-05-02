@@ -23,6 +23,12 @@ library
                       , colour
                       , linear
                       , parallel
+                      , vector
+                      , hmatrix
+                      , repa
+--                      , bed-and-breakfast
+                      , vector
+                      , vector-space
     default-language:   Haskell2010
     exposed-modules:    SatOpt
                         SatOpt.Render
