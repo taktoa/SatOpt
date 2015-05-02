@@ -1,20 +1,16 @@
-{-# OPTIONS_GHC -fno-warn-unused-imports #-}
-{-# LANGUAGE BangPatterns #-}
 {-# LANGUAGE ViewPatterns #-}
 
 -- | TODO
 module SatOpt (module SatOpt) where
 
-import           SatOpt.Render               as SatOpt
+import           SatOpt.FFT               as SatOpt (fft2d, ifft2d)
+import           SatOpt.Render            as SatOpt
+import           SatOpt.Utility           as SatOpt
 -- GENERATE: import New.Module as SatOpt
 
-import           Control.Parallel.Strategies (parMap, rdeepseq)
 import           Data.Colour.RGBSpace
 import           Data.Colour.RGBSpace.HSL
 import           Data.Complex
-import           Data.List                   (transpose)
-import           Debug.Trace                 (trace)
-import           Numeric.FFT                 (fft, ifft)
 
 size :: Num a => a
 size = 256
@@ -22,30 +18,16 @@ size = 256
 center :: Floating a => a -> a
 center x = x - (size / 2)
 
-norm :: Floating a => a -> a -> a
-norm x y = sqrt $ x^2 + y^2
-
 cnorm :: Floating a => a -> a -> a
 cnorm x y = norm (center x) (center y)
-
-clamp :: Double -> Double
-clamp x
-  | x > 1     = 1
-  | x < 0     = 0
-  | otherwise = x
 
 window :: Double -> Double -> Double
 window x y = (+ 0.5) $ clamp $ subtract 0.5 $ (* (size/8)) $ recip $ cnorm x y
 
-square :: Num a => a -> a
-square x = x * x
-
---fracComp :: RealFrac a => a -> a
-
 pointSources :: [(Double, Double, Complex Double)] ->
                 Double -> Double -> Complex Double
 pointSources [] _ _ = 0
-pointSources ((cx,cy,s):xs) x y = s * (delta cx cy x y) + pointSources xs x y
+pointSources ps x y = sum $ map (\(cx, cy, s) -> s * delta cx cy x y) ps
 
 
 testFunc :: Double -> Double -> Complex Double
@@ -65,8 +47,9 @@ testFunc = pointSources [ (0.48, 0.48, 0.5 :+ 0)
 wavenum :: [[Complex Double]]
 wavenum = constm 1
 
-im = [[x :+ 0 | y <- [0, 1 .. size]] | x <- [0, 1 .. size]]
-jm = [[y :+ 0 | y <- [0, 1 .. size]] | x <- [0, 1 .. size]]
+im, jm :: [[Complex Double]]
+im = sample2D (\x _ -> x :+ 0) [0, 1 .. size] [0, 1 .. size]
+jm = sample2D (\_ y -> y :+ 0) [0, 1 .. size] [0, 1 .. size]
 
 constm           :: Num a        =>   a   -> [[a]]
 addm, subm, mulm :: Num a        => [[a]] -> [[a]] -> [[a]]
@@ -82,27 +65,16 @@ negm     = map (map negate)
 sqm      = map (map square)
 
 func1 :: [[Complex Double]] -> [[Complex Double]]
-func1 x = ifft2d $ (fft2d x) `divm` (((sqm wavenum) `addm` (sqm im) `addm` (sqm jm)))
+func1 x = ifft2d $ fft2d x `divm` (sqm wavenum `addm` sqm im `addm` sqm jm)
 
+eps :: Double
 eps = 0.01
 
 delta :: Double -> Double -> Double -> Double -> Complex Double
 delta cx cy x y = if norm ((x / size) - cx) ((y / size) - cy) < eps then 1 else 0
 
 matrix :: [[Complex Double]]
-matrix = [[testFunc x y | y <- [0, 1 .. size - 1]] | x <- [0, 1 .. size - 1]]
-
-fft2d :: [[Complex Double]] -> [[Complex Double]]
-fft2d m = transpose $ mapFFT $ inter
-  where
-    !inter = transpose $ mapFFT m
-    mapFFT = parMap rdeepseq fft
-
-ifft2d :: [[Complex Double]] -> [[Complex Double]]
-ifft2d m = transpose $ mapIFFT $ inter
-  where
-    !inter = transpose $ mapIFFT m
-    mapIFFT = parMap rdeepseq ifft
+matrix = sample2D testFunc [0, 1 .. size - 1] [0, 1 .. size - 1]
 
 rendCmp :: Complex Double -> (Double, Double, Double)
 rendCmp c = uncurryRGB (\x y z -> (x, y, z)) $ hsl a 0.25 m
@@ -117,10 +89,6 @@ test2 = ifft2d $ fft2d matrix
 test3 :: [[Complex Double]]
 test3 = func1 matrix
 
-unconcat :: Int -> [a] -> [[a]]
-unconcat _ [] = []
-unconcat i xs = (take i xs) : unconcat i (drop i xs)
-
 lengthX :: [[a]] -> Int
 lengthX = length . head
 
@@ -134,12 +102,9 @@ index i j l
   | i >= lengthX l = error $ "x out of bounds: " ++ show i ++ " > " ++ show (lengthX l)
   | j >= lengthY l = error $ "y out of bounds: " ++ show j ++ " > " ++ show (lengthY l)
   | otherwise      = (l !! i) !! j
-      --trace ("i: " ++ show i ++ ", j: " ++ show j) $ (l !! i) !! j
 
 myfun :: Double -> Double -> (Double, Double, Double)
---myfun i j = (sin (20 * i)) * (sin (20 * j))
 myfun i j = rendCmp $ index (round $ i * (size - 1)) (round $ j * (size - 1)) test3
-  --(test1 !! (round (i * (size - 2)))) !! (round (j * (size - 2)))
 
 rotate :: Complex Double -> Complex Double
 rotate = uncurry mkPolar . rot . polar
