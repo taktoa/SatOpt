@@ -25,6 +25,8 @@ library
                       , parallel
                       , vector
                       , hmatrix
+--                      , hmatrix-gsl
+--                      , hmatrix-special
                       , repa
                       , vector
                       , vector-space
