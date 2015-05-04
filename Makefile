@@ -1,5 +1,6 @@
 .PHONY: all build clean configure haddock hpc install repl run test
 shell = '$$SHELL'
+
 all: install configure build haddock test hpc
 
 build:
@@ -31,8 +32,8 @@ nix-clean:
 	if test -e shell.nix; then rm shell.nix; fi
 
 nix-init: clean
-	[ `cabal2nix --version | head -c 3` = "2.0" ] && cabal2nix --shell . > shell.nix;
-	[ `cabal2nix --version | head -c 3` = "2.0" ] && cabal2nix . > default.nix;
+	cabal2nix --shell . > shell.nix;
+	cabal2nix . > default.nix;
 
 nix-shell: nix-init
 	nix-shell --command 'make install && IN_NIX="nix " $(shell)'

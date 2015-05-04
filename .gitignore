@@ -16,6 +16,7 @@ cabal.config
 *.aux
 *.hp
 *.tix
+*.eventlog
 default.nix
 shell.nix
 scratchpad.hs

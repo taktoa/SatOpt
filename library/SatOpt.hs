@@ -42,6 +42,12 @@ defState = State { amplitude  = constF (0 :+ 0)
                  , concrete   = False
                  }
 
+fromField :: Element a => Field2D a -> Matrix a
+fromField (FFunc f) = sample2DM f [0, 1 .. size - 1] [0, 1 .. size - 1]
+fromField (FMat m)  = m
+fromField (FFT m)   = m
+fromField (FDisp m) = m
+
 matField :: Element a => Field2D a -> Field2D a
 matField (FFunc f) = FMat $ sample2DM f [0, 1 .. size - 1] [0, 1 .. size - 1]
 matField x         = x
@@ -72,12 +78,30 @@ phaseShift p m = mags * zipMatrixWith (:+) (cos angles) (sin angles)
     mags = m * conj m
 
 timeShift :: ℝ -> ℝ -> Matrix ℂ -> Matrix ℂ
-timeShift f t m = case matField $ constF (2 * pi * f * t) of
+timeShift f t m = case matField $ constF (tau * f * t) of
                    FMat p -> phaseShift p m
                    _      -> error "matField output invalid"
 
 size :: Num a => a
-size = 256
+size = 64
+
+tau :: ℝ
+tau = 2 * pi
+
+rootsOfUnity :: Int -> [ℂ]
+rootsOfUnity i = take i $ iterate (rotate (tau / fromIntegral i)) (1 :+ 0)
+
+fromC :: ℂ -> (ℝ, ℝ)
+fromC (a :+ b) = (a, b)
+
+toC ::(ℝ, ℝ) -> ℂ
+toC (a, b) = a :+ b
+
+scaleC :: ℝ -> ℂ -> ℂ
+scaleC r c = (r :+ 0) * c
+
+pointsOnCircle :: Int -> ℝ -> [(ℝ, ℝ)]
+pointsOnCircle i r = map (fromC . scaleC r) $ rootsOfUnity i
 
 -- | Take a position with respect to the center and move its origin to the top right
 center :: Floating a => a -> a
@@ -92,10 +116,22 @@ window x y = (+ 0.5) $ clamp $ subtract 0.5 $ (* (size/8)) $ recip $ cnorm x y
 pointSources :: [(ℝ, ℝ, ℂ)] -> ℝ -> ℝ -> ℂ
 pointSources ps x y = sum $ map (\(cx, cy, s) -> s * delta cx cy x y) ps
 
+circleOfSources :: ℝ -> [ℂ] -> ℝ -> ℝ -> ℂ
+circleOfSources rad cs = pointSources $ zipCs $ pointsOnCircle (length cs) rad
+  where
+    zipCs = map (\(z, (x, y)) -> (x, y, z)) . zip cs
+
 testFunc :: ℝ -> ℝ -> ℂ
-testFunc = pointSources [ (0.48, 0.48, 0.5 :+ 0)
-                        , (0.52, 0.52, (-0.5) :+ 0)
-                        ]
+testFunc = circleOfSources 0.1 [ pol 1 0
+                               , pol 1 45
+                               , pol 1 45
+                               , pol 1 0
+                               ]
+  where
+    pol m p = mkPolar m ((pi/180)*p)
+-- testFunc = pointSources [ (0.48, 0.48, 0.5 :+ 0)
+--                         , (0.52, 0.52, (-0.5) :+ 0)
+--                         ]
 
 wavenumF :: ℝ -> ℝ -> ℂ
 wavenumF _ _ = 1 :+ 0
@@ -115,7 +151,9 @@ eps :: ℝ
 eps = 0.01
 
 delta :: ℝ -> ℝ -> ℝ -> ℝ -> ℂ
-delta cx cy x y = if norm ((x / size) - cx) ((y / size) - cy) < eps then 1 else 0
+delta cx cy x y
+  | norm ((center x / size) - cx) ((center y / size) - cy) < eps    = 1
+  | otherwise                                                       = 0
 
 matrix :: Matrix ℂ
 matrix = sample2DM testFunc [0, 1 .. size - 1] [0, 1 .. size - 1]
@@ -134,13 +172,8 @@ test3 = func1 matrix
 indx :: (Indexable m v, Indexable v e) => Int -> Int -> m -> e
 indx i j m = (m ! i) ! j
 
-myfun :: ℝ -> ℝ -> (ℝ, ℝ, ℝ)
-myfun i j = rendCmp $ indx (round $ i * (size - 1)) (round $ j * (size - 1)) test3
-
-rotate :: ℂ -> ℂ
-rotate = uncurry mkPolar . rot . polar
-  where
-    rot (m, p) = (m, p + 0.1)
+rotate :: ℝ -> ℂ -> ℂ
+rotate r = uncurry mkPolar . (\(m, p) -> (m, p + r)) . polar
 
 visual :: (ℝ, ℝ, ℝ, ℝ) -> ℂ -> ℂ
 visual (xa, xb, ya, yb) (polar -> (m, p))
@@ -153,11 +186,20 @@ visualM cs = mapMatrix (visual (small, big, 0, 1)) cs
     small = minimum mags
     big   = maximum mags
 
-config :: Conf (Matrix ℂ)
+updateState :: State -> State
+updateState s@State { time = t } = s { time = t + 0.1, concrete = False }
+
+renderState :: State -> [[RGBTrip]]
+renderState = map (map rendCmp) . toLists . visualM . ampField
+  where
+  ampField = fromField . concAmp
+  concAmp = amplitude . makeConcrete
+
+config :: Conf State
 config = Conf { keyBinds = const id
-              , state    = test3
-              , evolve   = mapMatrix rotate
-              , render   = map (map rendCmp) . toLists . visualM
+              , state    = defState { sources = FMat test3, freq = 1 }
+              , evolve   = updateState
+              , render   = renderState
               , canvas   = (size, size)
               }
 
