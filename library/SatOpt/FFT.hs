@@ -1,38 +1,32 @@
 {-# LANGUAGE BangPatterns #-}
 
--- | TODO
+-- | 2D FFT functions
 module SatOpt.FFT where
 
 import           Control.Parallel.Strategies   (parMap, rdeepseq)
---import           Data.Complex                  (Complex)
-import           Data.List                     (transpose)
-import           Numeric.FFT                   (fft, ifft)
+import           Numeric.GSL.Fourier           (fft, ifft)
 import           Numeric.LinearAlgebra.HMatrix
 
-fft2d, ifft2d :: [[ℂ]] -> [[ℂ]]
-fft2d m = transpose $ mapFFT inter
-  where
-    !inter = transpose $ mapFFT m
-    mapFFT = parMap rdeepseq fft
-ifft2d m = transpose $ mapIFFT inter
-  where
-    !inter = transpose $ mapIFFT m
-    mapIFFT = parMap rdeepseq ifft
 
-fftV :: Vector ℂ -> Vector ℂ
-fftV = fromList . fft . toList
+half [] = []
+half (x:y:xs) = x : half xs
 
-ifftV :: Vector ℂ -> Vector ℂ
-ifftV = fromList . ifft . toList
+clone [] = []
+clone (x:xs) = x : x : clone xs
 
+-- | Take the FFT of a matrix of complex numbers
 fft2dM :: Matrix ℂ -> Matrix ℂ
-fft2dM m = fromColumns $ mapFFT $ toColumns inter
+fft2dM m = fromColumns $ clone $ clone $ inter0
   where
-    !inter = fromRows $ mapFFT $ toRows m
-    mapFFT = parMap rdeepseq fftV
+    !inter0 = mapFFT $ inter1
+    !inter1 = half $ half $ toColumns $ fromRows $ clone $ clone $ inter2
+    !inter2 = mapFFT $ inter3
+    !inter3 = half $ half $ toRows m
+    mapFFT = parMap rdeepseq fft
 
+-- | Take the inverse FFT of a matrix of complex numbers
 ifft2dM :: Matrix ℂ -> Matrix ℂ
 ifft2dM m = fromColumns $ mapIFFT $ toColumns inter
   where
     !inter = fromRows $ mapIFFT $ toRows m
-    mapIFFT = parMap rdeepseq ifftV
+    mapIFFT = parMap rdeepseq ifft
