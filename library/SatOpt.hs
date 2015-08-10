@@ -124,7 +124,7 @@ timeShift f t m = case matField $ constF (tau * f * t) of
                    _      -> error "matField output invalid"
 
 size :: Num a => a
-size = 512
+size = 256
 
 tau :: ℝ
 tau = 2 * pi
@@ -214,6 +214,7 @@ updateState :: State a -> State a
 updateState s@State { time = t } = s { time = t + 0.01, concrete = False }
 
 data RenderMode = RendAmp | RendSrc | RendDsp | RendAmpMag | RendAmpPhs
+
 
 renderState :: RenderMode -> State a -> RGBTrips
 renderState r = case r of
@@ -346,5 +347,5 @@ config = changeConf id
 
 -- | TODO
 main :: IO ()
-main = optimize
---main = runDisp config
+--main = optimize
+main = runDisp config
